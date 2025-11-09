@@ -24,3 +24,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 自定义文件上传按钮样式 */
+input[type="file"]::-webkit-file-upload-button {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: 1rem;
+}
+
+input[type="file"]::-webkit-file-upload-button:hover {
+  background: #dbeafe;
+}
