@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const fileDir = await ensureTempDir(fileNameHash);
 
     // 构造分片文件路径
-    const chunkFileName = `${chunkHash}`;
+    const chunkFileName = `${chunkHash}.part${chunkIndex}`;
     const chunkFilePath = join(fileDir, chunkFileName);
 
     // 将分片写入磁盘

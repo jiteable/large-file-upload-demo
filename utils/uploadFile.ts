@@ -10,7 +10,8 @@ import SparkMD5 from 'spark-md5';
  * @returns 文件名哈希值
  */
 function calculateFileNameHash(fileName: string): string {
-  return SparkMD5.hash(fileName);
+  const timestamp = Date.now().toString();
+  return SparkMD5.hash(fileName + timestamp);
 }
 /**
  * 控制并发上传的函数
@@ -110,6 +111,7 @@ export async function handleFileUpload(file: File): Promise<void> {
       },
       body: JSON.stringify({
         fileName: file.name,
+        fileNameHash: fileNameHash,
         totalChunks: totalChunks
       })
     });
