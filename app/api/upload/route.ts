@@ -3,6 +3,14 @@ import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
+
 // 确保临时目录存在
 async function ensureTempDir() {
   const tempDir = join(process.cwd(), 'tmp', 'uploads');
@@ -19,6 +27,7 @@ export async function POST(request: NextRequest) {
     const chunk = formData.get('chunk') as File | null;
     const chunkIndex = formData.get('chunkIndex') as string | null;
     const fileName = formData.get('fileName') as string | null;
+    const chunkHash = formData.get('chunkHash') as string | null;
 
     // 验证必要参数
     if (!chunk || !chunkIndex || !fileName) {
@@ -28,21 +37,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 确保临时目录存在
-    const tempDir = await ensureTempDir();
-
-    // 构造分片文件路径
-    const chunkFileName = `${fileName}.part${chunkIndex}`;
-    const chunkFilePath = join(tempDir, chunkFileName);
-
-    // 将分片写入磁盘
-    const bytes = await chunk.arrayBuffer();
-    await writeFile(chunkFilePath, new Uint8Array(bytes));
+    console.log('-----chunk: ', chunk)
+    console.log('------chunkIndex: ', chunkIndex)
+    console.log('-----fileName: ', fileName)
+    console.log('-----chunkHash: ', chunkHash)
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Chunk ${chunkIndex} uploaded successfully`
+        message: `Chunk ${chunkIndex} received successfully.`,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
@@ -59,3 +62,16 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return new Response('Method not allowed', { status: 405 });
 }
+
+
+
+// // 确保临时目录存在
+// const tempDir = await ensureTempDir();
+
+// // 构造分片文件路径
+// const chunkFileName = `${fileName}.part${chunkIndex}`;
+// const chunkFilePath = join(tempDir, chunkFileName);
+
+// // 将分片写入磁盘
+// const bytes = await chunk.arrayBuffer();
+// await writeFile(chunkFilePath, new Uint8Array(bytes));

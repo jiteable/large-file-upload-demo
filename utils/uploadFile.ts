@@ -8,24 +8,24 @@ import { calculateChunkHash } from './calculateChunkHash';
  * @param limit 最大并发数
  */
 async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: number): Promise<void> {
-  const executing: Promise<any>[] = [];
+  const taskPool: Promise<any>[] = [];
 
   for (const task of tasks) {
     const promise = task().then(() => {
       // 任务完成后从执行队列中移除
-      executing.splice(executing.indexOf(promise), 1);
+      taskPool.splice(taskPool.indexOf(promise), 1);
     });
 
-    executing.push(promise);
+    taskPool.push(promise);
 
     // 如果当前执行的任务数达到限制，则等待其中一个完成
-    if (executing.length >= limit) {
-      await Promise.race(executing);
+    if (taskPool.length >= limit) {
+      await Promise.race(taskPool);
     }
   }
 
   // 等待所有剩余的任务完成
-  await Promise.all(executing);
+  await Promise.all(taskPool);
 }
 
 /**
@@ -90,23 +90,23 @@ export async function handleFileUpload(file: File): Promise<void> {
     console.log('所有分片上传完成');
 
     // 4. 通知服务器合并文件
-    const mergeResponse = await fetch('/api/merge', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        fileName: file.name,
-        totalChunks: totalChunks
-      })
-    });
+    // const mergeResponse = await fetch('/api/merge', {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json'
+    //   },
+    //   body: JSON.stringify({
+    //     fileName: file.name,
+    //     totalChunks: totalChunks
+    //   })
+    // });
 
-    if (!mergeResponse.ok) {
-      throw new Error('Failed to merge file chunks');
-    }
+    // if (!mergeResponse.ok) {
+    //   throw new Error('Failed to merge file chunks');
+    // }
 
-    const mergeResult = await mergeResponse.json();
-    console.log('文件合并成功:', mergeResult.message);
+    // const mergeResult = await mergeResponse.json();
+    // console.log('文件合并成功:', mergeResult.message);
   } catch (error) {
     console.error('上传过程中出错:', error);
     throw error;

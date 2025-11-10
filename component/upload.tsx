@@ -17,12 +17,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
     setUploadStatus('');
-
-    if (selectedFile) {
-      handleFileUpload(selectedFile).catch(error => {
-        console.error('文件处理出错:', error);
-      });
-    }
   };
 
   const handleUpload = () => {
@@ -33,14 +27,19 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
 
     setUploadStatus('上传中...');
 
-    // 模拟上传过程
-    setTimeout(() => {
-      setUploadStatus('上传成功!');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      setFile(null);
-    }, 1500);
+    // 在点击上传按钮时才开始真正的上传过程
+    handleFileUpload(file)
+      .then(() => {
+        setUploadStatus('上传成功!');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        setFile(null);
+      })
+      .catch(error => {
+        console.error('文件处理出错:', error);
+        setUploadStatus(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      });
   };
 
   const handleCancel = () => {
