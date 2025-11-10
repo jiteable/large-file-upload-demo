@@ -1,7 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getUploadedChunks } from './getUploadedChunks';
 import { calculateChunkHash } from './calculateChunkHash';
+import SparkMD5 from 'spark-md5';
 
+
+/**
+ * 计算文件名哈希
+ * @param fileName 原始文件名
+ * @returns 文件名哈希值
+ */
+function calculateFileNameHash(fileName: string): string {
+  return SparkMD5.hash(fileName);
+}
 /**
  * 控制并发上传的函数
  * @param tasks 上传任务数组
@@ -37,6 +47,9 @@ export async function handleFileUpload(file: File): Promise<void> {
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
 
+  // 计算文件名哈希
+  const fileNameHash = calculateFileNameHash(file.name);
+
   // 1. 先查询已上传的片段数量
   // const uploadedChunks = await getUploadedChunks(file.name);
   const uploadedChunks = 0;
@@ -59,6 +72,7 @@ export async function handleFileUpload(file: File): Promise<void> {
       formData.append('chunk', chunk);
       formData.append('chunkIndex', i.toString());
       formData.append('fileName', file.name);
+      formData.append('fileNameHash', fileNameHash); // 传递文件名哈希值
       formData.append('chunkHash', chunkHash); // 传递哈希值
 
       console.log(`开始上传分片 ${i}:`);
@@ -83,30 +97,29 @@ export async function handleFileUpload(file: File): Promise<void> {
 
     uploadTasks.push(createUploadTask);
   }
-
   try {
     // 3. 使用并发控制执行所有上传任务
     await uploadWithConcurrencyLimit(uploadTasks, MAX_CONCURRENT_REQUESTS);
     console.log('所有分片上传完成');
 
     // 4. 通知服务器合并文件
-    // const mergeResponse = await fetch('/api/merge', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify({
-    //     fileName: file.name,
-    //     totalChunks: totalChunks
-    //   })
-    // });
+    const mergeResponse = await fetch('/api/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        totalChunks: totalChunks
+      })
+    });
 
-    // if (!mergeResponse.ok) {
-    //   throw new Error('Failed to merge file chunks');
-    // }
+    if (!mergeResponse.ok) {
+      throw new Error('Failed to merge file chunks');
+    }
 
-    // const mergeResult = await mergeResponse.json();
-    // console.log('文件合并成功:', mergeResult.message);
+    const mergeResult = await mergeResponse.json();
+    console.log('文件合并成功:', mergeResult.message);
   } catch (error) {
     console.error('上传过程中出错:', error);
     throw error;
