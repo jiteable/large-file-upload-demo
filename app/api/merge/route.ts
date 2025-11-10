@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { writeFile, mkdir, readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { rm } from 'fs/promises';
 
 const UPLOADS_DIR = join(process.cwd(), 'server', 'uploads');
 const MERGE_DIR = join(process.cwd(), 'server', 'merge');
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
       // 追加写入到合并文件
       await writeFile(mergedFilePath, chunkData, { flag: 'a' });
     }
+
+    await rm(sourceDir, { recursive: true });
 
     return new Response(
       JSON.stringify({
