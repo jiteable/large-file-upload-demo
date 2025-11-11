@@ -33,7 +33,11 @@ export async function POST(request: NextRequest) {
       if (file.includes('.part')) {
         const match = file.match(/\.part(\d+)$/);
         if (match) {
-          chunkIndices.push(parseInt(match[1]));
+          const index = parseInt(match[1]);
+          // 避免重复添加相同的索引
+          if (!chunkIndices.includes(index)) {
+            chunkIndices.push(index);
+          }
           return true;
         }
       }
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
     // 返回分片数量和具体的分片索引数组
     return new Response(
       JSON.stringify({
-        uploadedChunks: chunkFiles.length,
+        uploadedChunks: chunkIndices.length, // 使用实际索引数量而不是文件数量
         uploadedChunkIndices: chunkIndices.sort((a, b) => a - b) // 升序
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }

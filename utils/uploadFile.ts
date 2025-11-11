@@ -7,10 +7,12 @@ import SparkMD5 from 'spark-md5';
 /**
  * 计算文件名哈希
  * @param fileName 原始文件名
+ * @param fileSize 文件大小
+ * @param lastModified 文件最后修改时间
  * @returns 文件名哈希值
  */
-function calculateFileNameHash(fileName: string): string {
-  return SparkMD5.hash(fileName);
+function calculateFileNameHash(fileName: string, fileSize: number, lastModified: number): string {
+  return SparkMD5.hash(`${fileName}-${fileSize}-${lastModified}`);
 }
 /**
  * 控制并发上传的函数
@@ -55,11 +57,14 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
   let finish = 0
 
-  // 计算文件名哈希
-  const fileNameHash = calculateFileNameHash(file.name);
+  // 计算文件名哈希（包含文件大小和最后修改时间）
+  const fileNameHash = calculateFileNameHash(file.name, file.size, file.lastModified);
 
   // 1. 先查询已上传的片段数量和具体索引
   const { uploadedChunks, uploadedChunkIndices } = await getUploadedChunks(fileNameHash);
+
+  console.log(`文件 ${file.name} 总共需要 ${totalChunks} 个分片`);
+  console.log(`已上传 ${uploadedChunks} 个分片，索引为: [${uploadedChunkIndices.join(', ')}]`);
 
   // 存储所有上传任务
   const uploadTasks: (() => Promise<any>)[] = [];
@@ -68,6 +73,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
   setUploadProgress(Math.floor((uploadedChunks / totalChunks) * 100));
 
   // 2. 为所有未上传的分片创建上传任务
+  let tasksCreated = 0;
   for (let i = 0; i < totalChunks; i++) {
     // 检查是否已取消
     if (signal?.aborted) {
@@ -80,6 +86,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       continue;
     }
 
+    tasksCreated++;
     const start = i * chunkSize;
     const end = Math.min(start + chunkSize, file.size);
     const chunk = file.slice(start, end);
@@ -100,6 +107,8 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       formData.append('fileName', file.name);
       formData.append('fileNameHash', fileNameHash); // 传递文件名哈希值
       formData.append('chunkHash', chunkHash); // 传递哈希值
+      formData.append('fileSize', file.size.toString()); // 传递文件大小
+      formData.append('lastModified', file.lastModified.toString()); // 传递最后修改时间
 
       console.log(`开始上传分片 ${i}:`);
       for (const [key, value] of formData.entries()) {
@@ -114,7 +123,8 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       });
 
       if (!response.ok) {
-        throw new Error(`分片 ${i} 上传失败: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`分片 ${i} 上传失败: ${errorText}`);
       }
 
       const result = await response.json();
@@ -131,6 +141,9 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
 
     uploadTasks.push(createUploadTask);
   }
+
+  console.log(`为文件 ${file.name} 创建了 ${tasksCreated} 个上传任务`);
+
   try {
     // 3. 使用并发控制执行所有上传任务
     await uploadWithConcurrencyLimit(uploadTasks, MAX_CONCURRENT_REQUESTS, signal);
@@ -142,6 +155,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
     }
 
     // 4. 通知服务器合并文件
+    console.log(`准备合并文件，期望 ${totalChunks} 个分片`);
     const mergeResponse = await fetch('/api/merge', {
       method: 'POST',
       headers: {
@@ -156,7 +170,8 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
     });
 
     if (!mergeResponse.ok) {
-      throw new Error('Failed to merge file chunks');
+      const errorText = await mergeResponse.text();
+      throw new Error(`Failed to merge file chunks: ${errorText}`);
     }
 
     const mergeResult = await mergeResponse.json();
@@ -174,6 +189,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
 
   console.log('文件上传成功！');
 }
+
 
 /**
  * 读取并打印文件内容（仅适用于文本文件）

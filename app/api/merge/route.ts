@@ -15,6 +15,21 @@ async function ensureMergeDir() {
   return MERGE_DIR;
 }
 
+// 读取文件元数据
+async function readFileMetadata(sourceDir: string) {
+  try {
+    const metadataPath = join(sourceDir, 'metadata.json');
+    if (existsSync(metadataPath)) {
+      const metadataContent = await readFile(metadataPath, 'utf8');
+      return JSON.parse(metadataContent);
+    }
+    return null;
+  } catch (error) {
+    console.error('Error reading metadata:', error);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 获取请求体中的数据
@@ -42,19 +57,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 读取文件元数据
+    const fileMetadata = await readFileMetadata(sourceDir);
+
     // 读取分片文件列表
     const chunkFiles = await readdir(sourceDir);
 
+    // 过滤出真正的分片文件（排除metadata.json和其他非分片文件）
+    const actualChunkFiles = chunkFiles.filter(file => file.includes('.part'));
+
     // 验证分片数量
-    if (chunkFiles.length !== totalChunks) {
+    if (actualChunkFiles.length !== totalChunks) {
       return new Response(
-        JSON.stringify({ error: `Expected ${totalChunks} chunks, but found ${chunkFiles.length}` }),
+        JSON.stringify({
+          error: `Expected ${totalChunks} chunks, but found ${actualChunkFiles.length}`,
+          details: {
+            expectedChunks: totalChunks,
+            actualChunks: actualChunkFiles.length,
+            uploadedChunks: actualChunkFiles
+          }
+        }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     // 按照分片索引排序
-    chunkFiles.sort((a, b) => {
+    actualChunkFiles.sort((a, b) => {
       const indexA = parseInt(a.match(/\.part(\d+)$/)?.[1] || '0');
       const indexB = parseInt(b.match(/\.part(\d+)$/)?.[1] || '0');
       return indexA - indexB;
@@ -81,7 +109,7 @@ export async function POST(request: NextRequest) {
     const mergedFilePath = join(MERGE_DIR, finalFileName);
 
     // 逐个读取分片并写入目标文件
-    for (const chunkFile of chunkFiles) {
+    for (const chunkFile of actualChunkFiles) {
       const chunkFilePath = join(sourceDir, chunkFile);
       const chunkData = await readFile(chunkFilePath);
 
@@ -89,20 +117,25 @@ export async function POST(request: NextRequest) {
       await writeFile(mergedFilePath, chunkData, { flag: 'a' });
     }
 
+    // 删除临时文件夹
     await rm(sourceDir, { recursive: true });
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `File merged successfully: ${finalFileName}`,
-        filePath: mergedFilePath
+        filePath: mergedFilePath,
+        metadata: fileMetadata
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Merge error:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to merge file chunks' }),
+      JSON.stringify({
+        error: 'Failed to merge file chunks',
+        details: (error as Error).message || 'Unknown error occurred during merge process'
+      }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
