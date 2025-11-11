@@ -1,7 +1,7 @@
 "use client"
 
-import FileUpload from "@/component/upload";
-import CreateFile from "@/component/createFile";
+import FileUpload from "@/components/upload";
+import CreateFile from "@/components/createFile";
 import { useState } from "react";
 
 export default function Home() {

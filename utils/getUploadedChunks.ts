@@ -1,26 +1,20 @@
-import { readdir } from 'fs/promises';
-import { join, basename } from 'path';
-import { existsSync } from 'fs';
 
-export async function getUploadedChunks(fileName: string): Promise<number> {
+export async function getUploadedChunks(fileNameHash: string): Promise<number> {
   try {
-    const tempDir = join(process.cwd(), 'tmp', 'uploads');
+    const response = await fetch('/api/upload-status', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileNameHash }),
+    });
 
-    // 如果目录不存在，说明还没有任何分片上传
-    if (!existsSync(tempDir)) {
-      return 0;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // 读取目录中的所有文件
-    const files = await readdir(tempDir);
-
-    // 过滤出当前文件的分片
-    const chunkFiles = files.filter(file =>
-      file.startsWith(fileName) && file.includes('.part')
-    );
-
-    // 返回分片数量
-    return chunkFiles.length;
+    const data = await response.json();
+    return data.uploadedChunks || 0;
   } catch (error) {
     console.error('Error getting uploaded chunks:', error);
     // 出错时返回0，重新开始上传

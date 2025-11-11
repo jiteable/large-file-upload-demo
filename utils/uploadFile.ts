@@ -10,8 +10,7 @@ import SparkMD5 from 'spark-md5';
  * @returns 文件名哈希值
  */
 function calculateFileNameHash(fileName: string): string {
-  const timestamp = Date.now().toString();
-  return SparkMD5.hash(fileName + timestamp);
+  return SparkMD5.hash(fileName);
 }
 /**
  * 控制并发上传的函数
@@ -43,17 +42,17 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
  * 处理文件上传的核心逻辑
  * @param file 要上传的文件
  */
-export async function handleFileUpload(file: File): Promise<void> {
+export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void): Promise<void> {
   const chunkSize = 1024 * 1024; // 1MB
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
+  let finish = 0
 
   // 计算文件名哈希
   const fileNameHash = calculateFileNameHash(file.name);
 
   // 1. 先查询已上传的片段数量
-  // const uploadedChunks = await getUploadedChunks(file.name);
-  const uploadedChunks = 0;
+  const uploadedChunks = await getUploadedChunks(fileNameHash);
 
   // 存储所有上传任务
   const uploadTasks: (() => Promise<any>)[] = [];
@@ -93,6 +92,11 @@ export async function handleFileUpload(file: File): Promise<void> {
 
       const result = await response.json();
       console.log(`分片 ${i} 上传成功:`, result.message);
+      finish++
+      setTimeout(() => {
+        setUploadProgress(Math.floor((finish / totalChunks) * 100))
+      }, 500)
+
       return result;
     };
 
