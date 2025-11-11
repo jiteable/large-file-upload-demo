@@ -16,11 +16,17 @@ function calculateFileNameHash(fileName: string): string {
  * 控制并发上传的函数
  * @param tasks 上传任务数组
  * @param limit 最大并发数
+ * @param signal AbortSignal用于取消请求
  */
-async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: number): Promise<void> {
+async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: number, signal?: AbortSignal): Promise<void> {
   const taskPool: Promise<any>[] = [];
 
   for (const task of tasks) {
+    // 检查是否已取消
+    if (signal?.aborted) {
+      throw new Error('Upload aborted');
+    }
+
     const promise = task().then(() => {
       // 任务完成后从执行队列中移除
       taskPool.splice(taskPool.indexOf(promise), 1);
@@ -41,8 +47,9 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
 /**
  * 处理文件上传的核心逻辑
  * @param file 要上传的文件
+ * @param signal AbortSignal用于取消请求
  */
-export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void): Promise<void> {
+export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
   const chunkSize = 1024 * 1024; // 1MB
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
@@ -59,12 +66,22 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
 
   // 2. 从已上传的下一个片段开始创建上传任务
   for (let i = uploadedChunks; i < totalChunks; i++) {
+    // 检查是否已取消
+    if (signal?.aborted) {
+      throw new Error('Upload aborted');
+    }
+
     const start = i * chunkSize;
     const end = Math.min(start + chunkSize, file.size);
     const chunk = file.slice(start, end);
 
     // 将任务创建包装在闭包中，确保每个任务使用正确的变量
     const createUploadTask = async () => {
+      // 检查是否已取消
+      if (signal?.aborted) {
+        throw new Error('Upload aborted');
+      }
+
       // 计算分片哈希
       const chunkHash = await calculateChunkHash(chunk, i, totalChunks, chunkSize);
 
@@ -83,7 +100,8 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       // 执行上传请求
       const response = await fetch('/api/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal // 添加signal参数
       });
 
       if (!response.ok) {
@@ -94,7 +112,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       console.log(`分片 ${i} 上传成功:`, result.message);
       finish++
       setTimeout(() => {
-        setUploadProgress(Math.floor((finish / totalChunks) * 100))
+        setUploadProgress(Math.floor(((finish + uploadedChunks) / totalChunks) * 100))
       }, 500)
 
       return result;
@@ -104,8 +122,13 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
   }
   try {
     // 3. 使用并发控制执行所有上传任务
-    await uploadWithConcurrencyLimit(uploadTasks, MAX_CONCURRENT_REQUESTS);
+    await uploadWithConcurrencyLimit(uploadTasks, MAX_CONCURRENT_REQUESTS, signal);
     console.log('所有分片上传完成');
+
+    // 检查是否已取消
+    if (signal?.aborted) {
+      throw new Error('Upload aborted');
+    }
 
     // 4. 通知服务器合并文件
     const mergeResponse = await fetch('/api/merge', {
@@ -117,7 +140,8 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
         fileName: file.name,
         fileNameHash: fileNameHash,
         totalChunks: totalChunks
-      })
+      }),
+      signal // 添加signal参数
     });
 
     if (!mergeResponse.ok) {
@@ -128,6 +152,12 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
     console.log('文件合并成功:', mergeResult.message);
   } catch (error) {
     console.error('上传过程中出错:', error);
+    if (signal?.aborted) {
+      // 将AbortError转换为有name属性的错误
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
     throw error;
   }
 
@@ -138,23 +168,23 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
  * 读取并打印文件内容（仅适用于文本文件）
  * @param fileToRead 要读取的文件
  */
-export function printFileContent(fileToRead: File): Promise<string | undefined> {
-  return new Promise((resolve, reject) => {
-    if (fileToRead.type.startsWith('text/') || fileToRead.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        console.log('文件内容:', content);
-        resolve(content);
-      };
-      reader.onerror = (e) => {
-        console.error('读取文件出错:', e);
-        reject(e);
-      };
-      reader.readAsText(fileToRead);
-    } else {
-      console.log('非文本文件，无法直接显示内容');
-      resolve(undefined);
-    }
-  });
-}
+// export function printFileContent(fileToRead: File): Promise<string | undefined> {
+//   return new Promise((resolve, reject) => {
+//     if (fileToRead.type.startsWith('text/') || fileToRead.name.endsWith('.txt')) {
+//       const reader = new FileReader();
+//       reader.onload = (e) => {
+//         const content = e.target?.result as string;
+//         console.log('文件内容:', content);
+//         resolve(content);
+//       };
+//       reader.onerror = (e) => {
+//         console.error('读取文件出错:', e);
+//         reject(e);
+//       };
+//       reader.readAsText(fileToRead);
+//     } else {
+//       console.log('非文本文件，无法直接显示内容');
+//       resolve(undefined);
+//     }
+//   });
+// }

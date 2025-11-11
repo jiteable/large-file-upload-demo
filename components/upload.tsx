@@ -1,4 +1,3 @@
-// component/upload.tsx
 "use client";
 
 import React, { useState, useRef, ChangeEvent } from 'react';
@@ -13,7 +12,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
   const [file, setFile] = useState<File | null>(() => initialFile);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -29,9 +30,14 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
 
     setUploadStatus('上传中...');
     setUploadProgress(0);
+    setIsPaused(false);
+
+    // 创建 AbortController 用于控制请求的中止
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
 
     // 在点击上传按钮时才开始真正的上传过程
-    handleFileUpload(file, setUploadProgress)
+    handleFileUpload(file, setUploadProgress, controller.signal)
       .then(() => {
         setUploadStatus('上传成功!');
         setUploadProgress(100);
@@ -39,16 +45,66 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
           fileInputRef.current.value = '';
         }
         setFile(null);
+        uploadControllerRef.current = null;
       })
       .catch(error => {
-        console.error('文件处理出错:', error);
-        setUploadStatus(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        if (error.name === 'AbortError') {
+          setUploadStatus('上传已暂停');
+        } else {
+          console.error('文件处理出错:', error);
+          setUploadStatus(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
+        uploadControllerRef.current = null;
       });
   };
 
+  const handlePause = () => {
+    if (uploadControllerRef.current) {
+      uploadControllerRef.current.abort();
+      setIsPaused(true);
+      setUploadStatus('上传已暂停');
+    }
+  };
+
+  const handleResume = () => {
+    if (file) {
+      setUploadStatus('上传中...');
+      setIsPaused(false);
+
+      // 创建新的 AbortController
+      const controller = new AbortController();
+      uploadControllerRef.current = controller;
+
+      // 重新开始上传过程
+      handleFileUpload(file, setUploadProgress, controller.signal)
+        .then(() => {
+          setUploadStatus('上传成功!');
+          setUploadProgress(100);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          setFile(null);
+          uploadControllerRef.current = null;
+        })
+        .catch(error => {
+          if (error.name === 'AbortError') {
+            setUploadStatus('上传已暂停');
+          } else {
+            console.error('文件处理出错:', error);
+            setUploadStatus(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          }
+          uploadControllerRef.current = null;
+        });
+    }
+  };
+
   const handleCancel = () => {
+    if (uploadControllerRef.current) {
+      uploadControllerRef.current.abort();
+    }
     setFile(null);
     setUploadStatus('');
+    setIsPaused(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -88,16 +144,35 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
         )}
 
         <div className="flex flex-wrap gap-3 pt-2">
-          <button
-            onClick={handleUpload}
-            disabled={uploadStatus === '上传中...'}
-            className={`px-5 py-2 rounded-md font-medium ${uploadStatus === '上传中...'
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
-          >
-            上传
-          </button>
+          {!isPaused ? (
+            <>
+              <button
+                onClick={handleUpload}
+                disabled={uploadStatus === '上传中...'}
+                className={`px-5 py-2 rounded-md font-medium ${uploadStatus === '上传中...'
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+              >
+                上传
+              </button>
+              {uploadStatus === '上传中...' && (
+                <button
+                  onClick={handlePause}
+                  className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md font-medium"
+                >
+                  暂停
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              onClick={handleResume}
+              className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium"
+            >
+              继续
+            </button>
+          )}
           <button
             onClick={handleCancel}
             className="px-5 py-2 bg-gray-200 hover:bg-gray-300 rounded-md font-medium text-gray-700"
@@ -109,7 +184,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
         {uploadStatus && (
           <div className={`p-3 rounded-md text-sm ${uploadStatus.includes('成功')
             ? 'bg-green-100 text-green-700'
-            : 'bg-red-100 text-red-700'
+            : uploadStatus.includes('暂停')
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-red-100 text-red-700'
             }`}>
             {uploadStatus}
           </div>
