@@ -58,17 +58,26 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
   // 计算文件名哈希
   const fileNameHash = calculateFileNameHash(file.name);
 
-  // 1. 先查询已上传的片段数量
-  const uploadedChunks = await getUploadedChunks(fileNameHash);
+  // 1. 先查询已上传的片段数量和具体索引
+  const { uploadedChunks, uploadedChunkIndices } = await getUploadedChunks(fileNameHash);
 
   // 存储所有上传任务
   const uploadTasks: (() => Promise<any>)[] = [];
 
-  // 2. 从已上传的下一个片段开始创建上传任务
-  for (let i = uploadedChunks; i < totalChunks; i++) {
+  // 更新初始进度为已上传的分片比例
+  setUploadProgress(Math.floor((uploadedChunks / totalChunks) * 100));
+
+  // 2. 为所有未上传的分片创建上传任务
+  for (let i = 0; i < totalChunks; i++) {
     // 检查是否已取消
     if (signal?.aborted) {
       throw new Error('Upload aborted');
+    }
+
+    // 如果分片已经上传，则跳过
+    if (uploadedChunkIndices.includes(i)) {
+      console.log(`分片 ${i} 已上传，跳过`);
+      continue;
     }
 
     const start = i * chunkSize;
@@ -111,9 +120,11 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       const result = await response.json();
       console.log(`分片 ${i} 上传成功:`, result.message);
       finish++
+      // 使用setTimeout确保进度更新在下一个事件循环中执行
       setTimeout(() => {
-        setUploadProgress(Math.floor(((finish + uploadedChunks) / totalChunks) * 100))
-      }, 500)
+        // 正确计算总进度：(已上传的分片 + 当前完成的分片) / 总分片数
+        setUploadProgress(Math.floor(((uploadedChunks + finish) / totalChunks) * 100))
+      }, 0)
 
       return result;
     };

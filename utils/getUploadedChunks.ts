@@ -1,5 +1,5 @@
 
-export async function getUploadedChunks(fileNameHash: string): Promise<number> {
+export async function getUploadedChunks(fileNameHash: string) {
   try {
     const response = await fetch('/api/upload-status', {
       method: 'POST',
@@ -14,7 +14,7 @@ export async function getUploadedChunks(fileNameHash: string): Promise<number> {
     }
 
     const data = await response.json();
-    return data.uploadedChunks || 0;
+    return data || 0;
   } catch (error) {
     console.error('Error getting uploaded chunks:', error);
     // 出错时返回0，重新开始上传
