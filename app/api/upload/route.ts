@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path, { join } from 'path';
+import { db } from '@/db/db';
 
 export const api = {
   bodyParser: { sizeLimit: '10mb' }
@@ -115,6 +116,38 @@ export async function POST(request: NextRequest) {
     const bytes = await chunk.arrayBuffer();
     await writeFile(chunkFilePath, new Uint8Array(bytes));
 
+    // 如果是第一个分片，同时创建文件记录
+    try {
+      const existingFile = await db.file.findUnique({
+        where: { hash: fileNameHash }
+      });
+
+      if (!existingFile) {
+        await db.file.create({
+          data: {
+            filename: fileName,
+            hash: fileNameHash,
+            size: parseInt(fileSize),
+            lastModified: BigInt(parseInt(lastModified)),
+          }
+        });
+      }
+    } catch (error) {
+      // 忽略唯一约束错误，因为可能在并发请求中已经被创建了
+      if (error instanceof Error && 'code' in error && error.code !== 'P2002') {
+        throw error;
+      }
+    }
+
+    // 将分片信息保存到数据库
+    await db.chunk.create({
+      data: {
+        index: parseInt(chunkIndex),
+        hash: chunkHash || '',
+        fileNameHash: fileNameHash,
+      }
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -135,7 +168,6 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return new Response('Method not allowed', { status: 405 });
 }
-
 
 
 // // 确保临时目录存在

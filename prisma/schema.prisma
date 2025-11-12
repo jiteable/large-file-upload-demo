@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
+  // Further reading:
+  // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+  // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+  url      = env("DATABASE_URL")
+}
+
+// 数据模型
+model File {
+  id            String     @id @default(uuid())
+  filename          String     // 原始文件名
+  hash          String     @unique // 文件名哈希，用于唯一标识文件
+  size          Int        // 文件大小（字节）
+  lastModified  BigInt     // 文件最后修改时间戳
+  createdAt     DateTime   @default(now())
+  mergedAt      DateTime?  // 文件合并完成时间
+  chunks        Chunk[]    // 关联的文件分片
+  uploaded      Boolean    @default(false) // 是否已完成上传和合并
+  path          String?    // 合并后文件存储路径
+}
+
+// 文件分片模型
+model Chunk {
+  id            String   @id @default(uuid())
+  index         Int      // 分片索引
+  hash          String   // 分片内容哈希
+  fileNameHash  String   // 所属文件的哈希
+  uploadedAt    DateTime @default(now())
+  file          File     @relation(fields: [fileNameHash], references: [hash])
+  @@unique([fileNameHash, index])
+}

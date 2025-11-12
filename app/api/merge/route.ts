@@ -3,6 +3,7 @@ import { writeFile, mkdir, readdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { rm } from 'fs/promises';
+import { db } from '@/db/db';
 
 const UPLOADS_DIR = join(process.cwd(), 'server', 'uploads');
 const MERGE_DIR = join(process.cwd(), 'server', 'merge');
@@ -119,6 +120,21 @@ export async function POST(request: NextRequest) {
 
     // 删除临时文件夹
     await rm(sourceDir, { recursive: true });
+
+    // 更新数据库中的文件记录并删除分片记录
+    const updatedFile = await db.file.update({
+      where: { hash: fileNameHash },
+      data: {
+        uploaded: true,
+        mergedAt: new Date(),
+        path: mergedFilePath,
+      }
+    });
+
+    // 删除分片记录
+    await db.chunk.deleteMany({
+      where: { fileNameHash: fileNameHash }
+    });
 
     return new Response(
       JSON.stringify({
