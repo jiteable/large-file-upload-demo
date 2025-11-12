@@ -20,42 +20,6 @@ async function ensureTempDir(fileNameHash: string) {
   return fileDir;
 }
 
-// 保存或验证文件元数据
-async function handleFileMetadata(fileDir: string, fileName: string, fileSize: number, lastModified: number) {
-  const metadataPath = join(fileDir, 'metadata.json');
-
-  // 如果元数据文件不存在，创建它
-  if (!existsSync(metadataPath)) {
-    const metadata = {
-      fileName,
-      fileSize,
-      lastModified,
-      createdAt: new Date().toISOString()
-    };
-    await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-    return true;
-  }
-
-  // 如果元数据文件存在，验证它
-  try {
-    const metadataContent = await readFile(metadataPath, 'utf8');
-    const metadata = JSON.parse(metadataContent);
-
-    // 验证文件名、大小和修改时间是否匹配
-    if (metadata.fileName === fileName &&
-      metadata.fileSize === fileSize &&
-      metadata.lastModified === lastModified) {
-      return true;
-    }
-
-    // 如果不匹配，说明是不同的文件
-    return false;
-  } catch (error) {
-    console.error('Error reading metadata:', error);
-    return false;
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     // 获取上传的表单数据
@@ -92,32 +56,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 确保临时目录存在
-    const fileDir = await ensureTempDir(fileNameHash);
-
-    // 验证或保存文件元数据
-    const isSameFile = await handleFileMetadata(
-      fileDir,
-      fileName,
-      parseInt(fileSize),
-      parseInt(lastModified)
-    );
-
-    if (!isSameFile) {
-      return new Response(
-        JSON.stringify({ error: 'File metadata mismatch. This appears to be a different file with the same name.' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
+    await ensureTempDir(fileNameHash);
 
     // 构造分片文件路径
     const chunkFileName = `${chunkHash}.part${chunkIndex}`;
-    // const chunkFilePath = join(fileDir, chunkFileName);
 
-    multipartUpload(fileNameHash, chunkFileName!, chunk)
-
-    // 将分片写入磁盘
-    // const bytes = await chunk.arrayBuffer();
-    // await writeFile(chunkFilePath, new Uint8Array(bytes));
+    // 只有当multipartUpload成功上传时才继续后续操作
+    await multipartUpload(fileNameHash, chunkFileName!, chunk)
 
     // 如果是第一个分片，同时创建文件记录
     try {
@@ -160,6 +105,14 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Upload error:', error);
+    // 如果是multipartUpload错误，则返回特定的错误信息
+    if (error instanceof Error && error.message.includes('上传错误')) {
+      return new Response(
+        JSON.stringify({ error: `Failed to upload chunk to OSS: ${error.message}` }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: 'Failed to upload chunk' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

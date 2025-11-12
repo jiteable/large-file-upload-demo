@@ -52,7 +52,7 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
  * @param signal AbortSignal用于取消请求
  */
 export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
-  const chunkSize = 1024 * 1024; // 1MB
+  const chunkSize = 5 * 1024 * 1024; // 1MB
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
   let finish = 0
