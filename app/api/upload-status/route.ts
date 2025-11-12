@@ -1,7 +1,5 @@
-import { NextRequest } from "next/server";
-import { readdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { NextRequest } from 'next/server';
+import { db } from '../../../db/db';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,41 +12,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tempDir = join(process.cwd(), 'server', 'uploads', fileNameHash);
-
-    // 如果目录不存在，说明还没有任何分片上传
-    if (!existsSync(tempDir)) {
-      return new Response(
-        JSON.stringify({ uploadedChunks: 0, uploadedChunkIndices: [] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 读取目录中的所有文件
-    const files = await readdir(tempDir);
-
-    // 过滤出当前文件的分片并提取索引
-    const chunkIndices: number[] = [];
-    const chunkFiles = files.filter(file => {
-      if (file.includes('.part')) {
-        const match = file.match(/\.part(\d+)$/);
-        if (match) {
-          const index = parseInt(match[1]);
-          // 避免重复添加相同的索引
-          if (!chunkIndices.includes(index)) {
-            chunkIndices.push(index);
-          }
-          return true;
-        }
+    // 从数据库查询已上传的分片信息
+    const uploadedChunks = await db.chunk.findMany({
+      where: {
+        fileNameHash: fileNameHash
+      },
+      select: {
+        index: true
+      },
+      orderBy: {
+        index: 'asc'
       }
-      return false;
     });
+
+    const chunkIndices = uploadedChunks.map(chunk => chunk.index);
 
     // 返回分片数量和具体的分片索引数组
     return new Response(
       JSON.stringify({
-        uploadedChunks: chunkIndices.length, // 使用实际索引数量而不是文件数量
-        uploadedChunkIndices: chunkIndices.sort((a, b) => a - b) // 升序
+        uploadedChunks: chunkIndices.length,
+        uploadedChunkIndices: chunkIndices
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );

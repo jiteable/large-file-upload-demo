@@ -3,6 +3,7 @@ import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path, { join } from 'path';
 import { db } from '@/db/db';
+import { multipartUpload } from '../utils';
 
 export const api = {
   bodyParser: { sizeLimit: '10mb' }
@@ -110,11 +111,13 @@ export async function POST(request: NextRequest) {
 
     // 构造分片文件路径
     const chunkFileName = `${chunkHash}.part${chunkIndex}`;
-    const chunkFilePath = join(fileDir, chunkFileName);
+    // const chunkFilePath = join(fileDir, chunkFileName);
+
+    multipartUpload(fileNameHash, chunkFileName!, chunk)
 
     // 将分片写入磁盘
-    const bytes = await chunk.arrayBuffer();
-    await writeFile(chunkFilePath, new Uint8Array(bytes));
+    // const bytes = await chunk.arrayBuffer();
+    // await writeFile(chunkFilePath, new Uint8Array(bytes));
 
     // 如果是第一个分片，同时创建文件记录
     try {
@@ -168,15 +171,3 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return new Response('Method not allowed', { status: 405 });
 }
-
-
-// // 确保临时目录存在
-// const tempDir = await ensureTempDir();
-
-// // 构造分片文件路径
-// const chunkFileName = `${fileName}.part${chunkIndex}`;
-// const chunkFilePath = join(tempDir, chunkFileName);
-
-// // 将分片写入磁盘
-// const bytes = await chunk.arrayBuffer();
-// await writeFile(chunkFilePath, new Uint8Array(bytes));

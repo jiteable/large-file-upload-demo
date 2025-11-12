@@ -20,6 +20,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
     setUploadStatus('');
+
+    // 打印文件信息
+    if (selectedFile) {
+      console.log('文件信息:', {
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type,
+        lastModified: selectedFile.lastModified
+      });
+    }
   };
 
   const handleUpload = () => {
