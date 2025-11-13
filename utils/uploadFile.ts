@@ -52,7 +52,7 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
  * @param signal AbortSignal用于取消请求
  */
 export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
-  const chunkSize = 5 * 1024 * 1024; // 1MB
+  const chunkSize = 5 * 1024 * 1024; // 5MB
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
   let finish = 0
@@ -156,26 +156,26 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
 
     // 4. 通知服务器合并文件
     console.log(`准备合并文件，期望 ${totalChunks} 个分片`);
-    // const mergeResponse = await fetch('/api/merge', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify({
-    //     fileName: file.name,
-    //     fileNameHash: fileNameHash,
-    //     totalChunks: totalChunks
-    //   }),
-    //   signal // 添加signal参数
-    // });
+    const mergeResponse = await fetch('/api/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileNameHash: fileNameHash,
+        totalChunks: totalChunks
+      }),
+      signal // 添加signal参数
+    });
 
-    // if (!mergeResponse.ok) {
-    //   const errorText = await mergeResponse.text();
-    //   throw new Error(`Failed to merge file chunks: ${errorText}`);
-    // }
+    if (!mergeResponse.ok) {
+      const errorText = await mergeResponse.text();
+      throw new Error(`Failed to merge file chunks: ${errorText}`);
+    }
 
-    // const mergeResult = await mergeResponse.json();
-    // console.log('文件合并成功:', mergeResult.message);
+    const mergeResult = await mergeResponse.json();
+    console.log('文件合并成功:', mergeResult.message);
   } catch (error) {
     console.error('上传过程中出错:', error);
     if (signal?.aborted) {

@@ -27,6 +27,7 @@ model File {
   chunks        Chunk[]    // 关联的文件分片
   uploaded      Boolean    @default(false) // 是否已完成上传和合并
   path          String?    // 合并后文件存储路径
+  uploadId      String?    // 分片上传任务ID
 }
 
 // 文件分片模型
@@ -36,6 +37,7 @@ model Chunk {
   hash          String   // 分片内容哈希
   fileNameHash  String   // 所属文件的哈希
   uploadedAt    DateTime @default(now())
+  etag          String   // 新增：存储OSS返回的ETag
   file          File     @relation(fields: [fileNameHash], references: [hash])
   @@unique([fileNameHash, index])
 }

@@ -3,7 +3,7 @@ import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path, { join } from 'path';
 import { db } from '@/db/db';
-import { multipartUpload } from '../utils';
+import { multipartUpload, initMultipartUpload } from '../utils';
 
 export const api = {
   bodyParser: { sizeLimit: '10mb' }
@@ -55,51 +55,99 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 确保临时目录存在
-    await ensureTempDir(fileNameHash);
-
-    // 构造分片文件路径
-    const chunkFileName = `${chunkHash}.part${chunkIndex}`;
-
-    // 只有当multipartUpload成功上传时才继续后续操作
-    await multipartUpload(fileNameHash, chunkFileName!, chunk)
-
-    // 如果是第一个分片，同时创建文件记录
+    // 如果是第一个分片，同时创建文件记录并初始化分片上传任务
+    let uploadId: string | null = null;
     try {
       const existingFile = await db.file.findUnique({
         where: { hash: fileNameHash }
       });
 
       if (!existingFile) {
-        await db.file.create({
-          data: {
-            filename: fileName,
-            hash: fileNameHash,
-            size: parseInt(fileSize),
-            lastModified: BigInt(parseInt(lastModified)),
+        // 初始化分片上传任务
+        const mergedFileKey = `files/uploaded/merge/${fileName}`;
+        const multipartUploadResult = await initMultipartUpload(mergedFileKey);
+        uploadId = multipartUploadResult.uploadId;
+
+        try {
+          await db.file.create({
+            data: {
+              filename: fileName,
+              hash: fileNameHash,
+              size: parseInt(fileSize),
+              lastModified: BigInt(parseInt(lastModified)),
+              uploadId: uploadId
+            }
+          });
+        } catch (createError) {
+          // 处理并发创建的情况 - 如果是唯一约束错误，则忽略
+          if (createError instanceof Error && 'code' in createError && createError.code === 'P2002') {
+            // 获取已创建的文件记录
+            const fileRecord = await db.file.findUnique({
+              where: { hash: fileNameHash }
+            });
+            uploadId = fileRecord?.uploadId || null;
+          } else {
+            throw createError;
           }
-        });
+        }
+      } else {
+        // 复用已存在的uploadId
+        uploadId = existingFile.uploadId;
       }
     } catch (error) {
-      // 忽略唯一约束错误，因为可能在并发请求中已经被创建了
-      if (error instanceof Error && 'code' in error && error.code !== 'P2002') {
+      console.error('创建文件记录时出错:', error);
+      // 如果是唯一约束错误，尝试获取已存在的记录
+      if (error instanceof Error && 'code' in error && error.code === 'P2002') {
+        const existingFile = await db.file.findUnique({
+          where: { hash: fileNameHash }
+        });
+        uploadId = existingFile?.uploadId || null;
+      } else {
         throw error;
       }
     }
 
+    // 检查是否缺少uploadId（理论上不应该发生）
+    if (!uploadId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing uploadId for multipart upload' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 构造分片在OSS中的路径（最终合并后的文件路径）
+    const mergedFileKey = `files/uploaded/merge/${fileName}`;
+
+    // 上传分片到OSS
+    const uploadResult = await multipartUpload(
+      mergedFileKey,
+      uploadId,
+      parseInt(chunkIndex) + 1, // partNumber从1开始
+      chunk
+    );
+
     // 将分片信息保存到数据库
-    await db.chunk.create({
-      data: {
-        index: parseInt(chunkIndex),
-        hash: chunkHash || '',
-        fileNameHash: fileNameHash,
+    try {
+      await db.chunk.create({
+        data: {
+          index: parseInt(chunkIndex),
+          hash: chunkHash || '',
+          fileNameHash: fileNameHash,
+          etag: uploadResult.etag
+        }
+      });
+    } catch (chunkError) {
+      // 处理重复分片的情况 - 如果是唯一约束错误，则忽略
+      if (!(chunkError instanceof Error && 'code' in chunkError && chunkError.code === 'P2002')) {
+        throw chunkError;
       }
-    });
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `Chunk ${chunkIndex} received successfully.`,
+        uploadId: uploadId
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
