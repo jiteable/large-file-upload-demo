@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构造合并后文件在OSS中的路径
-    const mergedFileKey = `files/uploaded/merge/${fileName}`;
+    // 构造合并后文件在OSS中的路径，使用fileNameHash确保唯一性
+    const mergedFileKey = `files/uploaded/merge/${fileNameHash}/${fileName}`;
 
     // 存储所有分片的etag信息，用于最后完成合并
     const parts = chunkRecords.map((chunk) => ({

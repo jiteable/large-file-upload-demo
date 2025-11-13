@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (!existingFile) {
-        // 初始化分片上传任务
-        const mergedFileKey = `files/uploaded/merge/${fileName}`;
+        // 初始化分片上传任务，使用fileNameHash作为OSS对象名以确保唯一性
+        const mergedFileKey = `files/uploaded/merge/${fileNameHash}/${fileName}`;
         const multipartUploadResult = await initMultipartUpload(mergedFileKey);
         uploadId = multipartUploadResult.uploadId;
 
@@ -115,8 +115,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构造分片在OSS中的路径（最终合并后的文件路径）
-    const mergedFileKey = `files/uploaded/merge/${fileName}`;
+    // 构造分片在OSS中的路径（最终合并后的文件路径），使用fileNameHash确保唯一性
+    const mergedFileKey = `files/uploaded/merge/${fileNameHash}/${fileName}`;
 
     // 上传分片到OSS
     const uploadResult = await multipartUpload(
