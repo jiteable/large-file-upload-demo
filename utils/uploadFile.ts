@@ -48,6 +48,7 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
   // 等待所有剩余的任务完成
   await Promise.all(taskPool);
 }
+
 /**
  * 处理文件上传的核心逻辑
  * @param file 要上传的文件
@@ -183,6 +184,165 @@ export async function handleFileUpload(
       },
       body: JSON.stringify({
         fileName: file.name,
+        fileNameHash: fileNameHash,
+        totalChunks: totalChunks
+      }),
+      signal // 添加signal参数
+    });
+
+    if (!mergeResponse.ok) {
+      const errorText = await mergeResponse.text();
+      throw new Error(`Failed to merge file chunks: ${errorText}`);
+    }
+
+    const mergeResult = await mergeResponse.json();
+    console.log('文件合并成功:', mergeResult.message);
+  } catch (error) {
+    console.error('上传过程中出错:', error);
+    if (signal?.aborted) {
+      // 将AbortError转换为有name属性的错误
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    throw error;
+  }
+
+  console.log('文件上传成功！');
+}
+
+/**
+ * 恢复未完成文件上传的核心逻辑
+ * @param fileName 文件名
+ * @param fileNameHash 文件名哈希
+ * @param fileSize 文件大小
+ * @param uploadedChunks 已上传的分片数
+ * @param totalChunks 总分片数
+ * @param setUploadProgress 进度更新函数
+ * @param signal AbortSignal用于取消请求
+ */
+export async function resumeFileUpload(
+  fileName: string,
+  fileNameHash: string,
+  fileSize: number,
+  uploadedChunks: number,
+  totalChunks: number,
+  setUploadProgress: (progress: number) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const chunkSize = 5 * 1024 * 1024; // 5MB
+  const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
+  let finish = 0;
+
+  // 1. 查询已上传的片段数量和具体索引
+  const { uploadedChunkIndices } = await getUploadedChunks(fileNameHash);
+
+  console.log(`文件 ${fileName} 总共需要 ${totalChunks} 个分片`);
+  console.log(`已上传 ${uploadedChunks} 个分片，索引为: [${uploadedChunkIndices.join(', ')}]`);
+
+  // 创建一个虚拟的文件对象用于上传操作
+  const virtualFile = new File([], fileName, { lastModified: Date.now() });
+
+  // 存储所有上传任务
+  const uploadTasks: (() => Promise<any>)[] = [];
+
+  // 更新初始进度为已上传的分片比例
+  setUploadProgress(Math.floor((uploadedChunks / totalChunks) * 100));
+
+  // 2. 为所有未上传的分片创建上传任务
+  let tasksCreated = 0;
+  for (let i = 0; i < totalChunks; i++) {
+    // 检查是否已取消
+    if (signal?.aborted) {
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
+    // 如果分片已经上传，则跳过
+    if (uploadedChunkIndices.includes(i)) {
+      console.log(`分片 ${i} 已上传，跳过`);
+      continue;
+    }
+
+    tasksCreated++;
+
+    // 对于恢复上传，我们只需要知道分片索引，实际数据会由后端处理
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, fileSize);
+
+    // 对于恢复上传，我们只需要知道分片索引，实际数据会由后端处理
+    const createUploadTask = async () => {
+      // 检查是否已取消
+      if (signal?.aborted) {
+        const abortError = new Error('Upload aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+
+      const formData = new FormData();
+      formData.append('chunkIndex', i.toString());
+      formData.append('fileName', fileName);
+      formData.append('fileNameHash', fileNameHash);
+      formData.append('fileSize', fileSize.toString());
+      formData.append('lastModified', Date.now().toString()); // 添加文件最后修改时间
+      formData.append('totalChunks', totalChunks.toString()); // 添加总分片数
+      formData.append('resumeUpload', 'true'); // 标记这是一个恢复上传的操作
+
+      console.log(`开始恢复上传分片 ${i}`);
+
+      // 执行上传请求
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+        signal // 添加signal参数
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`分片 ${i} 上传失败: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log(`分片 ${i} 上传成功:`, result.message);
+      finish++
+
+      // 使用setTimeout确保进度更新在下一个事件循环中执行
+      setTimeout(() => {
+        // 正确计算总进度：(已上传的分片 + 当前完成的分片) / 总分片数
+        const currentProgress = Math.floor(((uploadedChunks + finish) / totalChunks) * 100);
+        setUploadProgress(currentProgress);
+      }, 0)
+
+      return result;
+    };
+
+    uploadTasks.push(createUploadTask);
+  }
+
+  console.log(`为文件 ${fileName} 创建了 ${tasksCreated} 个上传任务`);
+
+  try {
+    // 3. 使用并发控制执行所有上传任务
+    await uploadWithConcurrencyLimit(uploadTasks, MAX_CONCURRENT_REQUESTS, signal);
+    console.log('所有分片上传完成');
+
+    // 检查是否已取消
+    if (signal?.aborted) {
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
+    // 4. 通知服务器合并文件
+    console.log(`准备合并文件，期望 ${totalChunks} 个分片`);
+    const mergeResponse = await fetch('/api/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fileName: fileName,
         fileNameHash: fileNameHash,
         totalChunks: totalChunks
       }),

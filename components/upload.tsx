@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { handleFileUpload, calculateFileNameHash } from '@/utils/uploadFile';
+import { handleFileUpload, calculateFileNameHash, resumeFileUpload } from '@/utils/uploadFile';
 import { Progress } from '@/components/ui/progress';
+
 
 interface FileUploadProps {
   initialFile?: File | null;
@@ -63,6 +65,24 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
         type: selectedFile.type,
         lastModified: selectedFile.lastModified
       });
+
+      // 检查是否存在与此文件匹配的未完成上传任务
+      const matchingIncompleteUpload = incompleteUploads.find(
+        (dbFile) => dbFile.filename === selectedFile.name && dbFile.size === selectedFile.size
+      );
+
+      if (matchingIncompleteUpload) {
+        const shouldResume = window.confirm(
+          `检测到文件 "${selectedFile.name}" 有一个未完成的上传任务，是否要恢复上传？`
+        );
+
+        if (shouldResume) {
+          // 延迟执行以确保state已更新
+          setTimeout(() => {
+            handleResumeIncomplete(matchingIncompleteUpload);
+          }, 0);
+        }
+      }
     }
   };
 
@@ -153,11 +173,142 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
         }
       });
   };
-  const handleResumeIncomplete = (dbFile: DatabaseFile) => {
-    // 这里应该实现恢复未完成上传的逻辑
-    // 由于我们无法从数据库重建 File 对象，所以需要特殊处理
+
+  // 浏览器不支持 文件句柄或定时轮询 所以只能通过选择文件的方式 完成恢复未完成上传 功能
+  const handleResumeIncomplete = async (dbFile: DatabaseFile) => {
+    // 实现恢复未完成上传的功能
     console.log('恢复未完成的上传:', dbFile);
-    alert(`恢复上传功能需要额外实现，文件: ${dbFile.filename}`);
+
+    // 检查是否已经有对应的文件在待上传区域
+    if (file && file.name === dbFile.filename && file.size === dbFile.size) {
+      // 直接使用已选择的文件进行恢复上传
+      await resumeUploadWithFile(dbFile, file);
+      return;
+    }
+
+    // 如果没有对应文件，提示用户选择文件
+    alert(`请先选择文件 "${dbFile.filename}" 来恢复上传`);
+
+    // 自动触发文件选择
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+
+    // 设置一个标志，表示我们正在等待特定文件的选择
+    const waitForFileSelection = new Promise<File | null>((resolve) => {
+      const originalOnChange = fileInputRef.current?.onchange;
+
+      fileInputRef.current!.onchange = (e: any) => {
+        // 执行原始的onChange处理
+        if (originalOnChange && fileInputRef.current) {
+          originalOnChange.call(fileInputRef.current, e);
+        }
+
+        const selectedFile = e.target.files?.[0] || null;
+
+        // 检查选择的文件是否是我们需要的文件
+        if (selectedFile && selectedFile.name === dbFile.filename && selectedFile.size === dbFile.size) {
+          resolve(selectedFile);
+        } else if (selectedFile) {
+          alert(`请选择正确的文件: ${dbFile.filename}`);
+          // 重要修复：清除文件输入，避免重复触发change事件
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          resolve(null);
+        } else {
+          resolve(null);
+        }
+
+        // 重要修复：恢复原始的onchange处理器
+        fileInputRef.current!.onchange = originalOnChange || null;
+      };
+    });
+
+    try {
+      const selectedFile = await waitForFileSelection;
+
+      if (selectedFile) {
+        await resumeUploadWithFile(dbFile, selectedFile);
+      } else {
+        // 重要修复：如果用户没有选择正确的文件，则退出流程
+        console.log('用户取消了文件选择或选择了错误的文件');
+      }
+    } catch (error) {
+      console.error('等待文件选择时出错:', error);
+    }
+  };
+  const resumeUploadWithFile = async (dbFile: DatabaseFile, selectedFile: File) => {
+    // 创建一个新的上传任务
+    const resumeTask: UploadTask = {
+      id: `${dbFile.filename}-${dbFile.id}`,
+      file: selectedFile,
+      progress: Math.round((dbFile.uploadChunks / dbFile.totalChunks) * 100),
+      status: 'pending',
+      controller: null
+    };
+
+    setUploadTasks(prev => [...prev, resumeTask]);
+
+    // 创建 AbortController 用于控制请求的中止
+    const controller = new AbortController();
+
+    // 更新任务状态为上传中
+    setUploadTasks(prev => prev.map(task =>
+      task.id === resumeTask.id
+        ? { ...task, status: 'uploading', controller }
+        : task
+    ));
+
+    try {
+      // 特殊处理：为已存在的文件恢复上传
+      await resumeFileUpload(
+        dbFile.filename,
+        dbFile.hash, // fileNameHash
+        dbFile.size,
+        dbFile.uploadChunks, // 已上传的分片数
+        dbFile.totalChunks, // 总分片数
+        (progress) => {
+          setUploadTasks(prev => prev.map(task =>
+            task.id === resumeTask.id
+              ? { ...task, progress }
+              : task
+          ));
+        },
+        controller.signal
+      );
+
+      // 完成后更新任务状态
+      setUploadTasks(prev => prev.map(task =>
+        task.id === resumeTask.id
+          ? { ...task, status: 'completed', progress: 100 }
+          : task
+      ));
+
+      // 从incompleteUploads中移除已完成的任务
+      setIncompleteUploads(prev => prev.filter(file => file.id !== dbFile.id));
+
+      // 清空文件选择
+      setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setUploadTasks(prev => prev.map(task =>
+          task.id === resumeTask.id
+            ? { ...task, status: 'paused' }
+            : task
+        ));
+      } else {
+        console.error('恢复上传失败:', error);
+        setUploadTasks(prev => prev.map(task =>
+          task.id === resumeTask.id
+            ? { ...task, status: 'failed' }
+            : task
+        ));
+      }
+    }
   };
 
   const handlePause = (taskId: string) => {
@@ -307,7 +458,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
           <div className="space-y-4">
             {/* 显示未完成的上传任务 */}
             {incompleteUploads.map((dbFile) => (
-              <div key={dbFile.id} className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
+              <div key={`incomplete-${dbFile.id}`} className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="font-medium text-gray-700 truncate max-w-xs" title={dbFile.filename}>
                     {dbFile.filename}
