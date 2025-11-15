@@ -11,11 +11,11 @@ export default function Home() {
             文件上传演示
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            测试大文件上传功能，可以选择创建测试文件或上传本地文件
+            测试大文件上传功能，可以选择创建测试文件、上传本地文件或查看已上传文件
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <Link href="/createfile" className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <div className="p-1 bg-gradient-to-r from-blue-500 to-purple-600"></div>
             <div className="p-8 text-center">
@@ -38,6 +38,19 @@ export default function Home() {
               </p>
               <button className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-300">
                 前往上传文件
+              </button>
+            </div>
+          </Link>
+
+          <Link href="/uploaded" className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div className="p-1 bg-gradient-to-r from-orange-500 to-red-600"></div>
+            <div className="p-8 text-center">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">查看上传文件</h2>
+              <p className="text-gray-600 mb-6">
+                查看和管理已上传的文件
+              </p>
+              <button className="px-6 py-3 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors duration-300">
+                查看文件列表
               </button>
             </div>
           </Link>

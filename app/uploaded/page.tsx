@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { db } from "@/db/db";
 
 interface UploadedFile {
   id: string;
   filename: string;
   size: number;
-  createdAt: Date;
-  mergedAt: Date | null;
+  createdAt: string;
+  mergedAt: string | null;
   uploaded: boolean;
   path: string | null;
+  lastModified: string;
+  hash: string;
 }
 
 export default function UploadedFilesPage() {
@@ -42,9 +43,34 @@ export default function UploadedFilesPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatDate = (date: Date | null): string => {
-    if (!date) return '未完成';
-    return new Date(date).toLocaleString('zh-CN');
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return '未完成';
+    return new Date(dateString).toLocaleString('zh-CN');
+  };
+
+  const handleDownload = async (fileId: string, filename: string) => {
+    try {
+      const response = await fetch(`/api/download?id=${fileId}`);
+
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.status}`);
+      }
+
+      // 获取响应体
+      const blob = await response.blob();
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('下载失败:', error);
+      alert('文件下载失败，请稍后重试');
+    }
   };
 
   return (
@@ -118,14 +144,13 @@ export default function UploadedFilesPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {file.uploaded && file.path ? (
-                              <Link
-                                href={`https://document-ai-dev.oss-cn-hongkong.aliyuncs.com/${file.path}`}
-                                target="_blank"
-                                className="text-orange-600 hover:text-orange-900"
+                            {file.uploaded ? (
+                              <button
+                                onClick={() => handleDownload(file.id, file.filename)}
+                                className="text-orange-600 hover:text-orange-900 font-medium"
                               >
                                 下载
-                              </Link>
+                              </button>
                             ) : (
                               <span className="text-gray-400">不可用</span>
                             )}

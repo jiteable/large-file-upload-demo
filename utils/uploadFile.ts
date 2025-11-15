@@ -11,9 +11,10 @@ import SparkMD5 from 'spark-md5';
  * @param lastModified 文件最后修改时间
  * @returns 文件名哈希值
  */
-function calculateFileNameHash(fileName: string, fileSize: number, lastModified: number): string {
+export function calculateFileNameHash(fileName: string, fileSize: number, lastModified: number): string {
   return SparkMD5.hash(`${fileName}-${fileSize}-${lastModified}`);
 }
+
 /**
  * 控制并发上传的函数
  * @param tasks 上传任务数组
@@ -26,7 +27,9 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
   for (const task of tasks) {
     // 检查是否已取消
     if (signal?.aborted) {
-      throw new Error('Upload aborted');
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
     }
 
     const promise = task().then(() => {
@@ -45,13 +48,17 @@ async function uploadWithConcurrencyLimit(tasks: (() => Promise<any>)[], limit: 
   // 等待所有剩余的任务完成
   await Promise.all(taskPool);
 }
-
 /**
  * 处理文件上传的核心逻辑
  * @param file 要上传的文件
  * @param signal AbortSignal用于取消请求
  */
-export async function handleFileUpload(file: File, setUploadProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+export async function handleFileUpload(
+  file: File,
+  setUploadProgress: (progress: number) => void,
+  signal?: AbortSignal,
+  onProgressUpdate?: (uploadedChunks: number) => void
+): Promise<void> {
   const chunkSize = 5 * 1024 * 1024; // 5MB
   const totalChunks = Math.ceil(file.size / chunkSize);
   const MAX_CONCURRENT_REQUESTS = 6; // 最大并发请求数
@@ -77,7 +84,9 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
   for (let i = 0; i < totalChunks; i++) {
     // 检查是否已取消
     if (signal?.aborted) {
-      throw new Error('Upload aborted');
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
     }
 
     // 如果分片已经上传，则跳过
@@ -95,7 +104,9 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
     const createUploadTask = async () => {
       // 检查是否已取消
       if (signal?.aborted) {
-        throw new Error('Upload aborted');
+        const abortError = new Error('Upload aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
       }
 
       // 计算分片哈希
@@ -109,6 +120,7 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       formData.append('chunkHash', chunkHash); // 传递哈希值
       formData.append('fileSize', file.size.toString()); // 传递文件大小
       formData.append('lastModified', file.lastModified.toString()); // 传递最后修改时间
+      formData.append('totalChunks', totalChunks.toString())
 
       console.log(`开始上传分片 ${i}:`);
       for (const [key, value] of formData.entries()) {
@@ -133,7 +145,13 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
       // 使用setTimeout确保进度更新在下一个事件循环中执行
       setTimeout(() => {
         // 正确计算总进度：(已上传的分片 + 当前完成的分片) / 总分片数
-        setUploadProgress(Math.floor(((uploadedChunks + finish) / totalChunks) * 100))
+        const currentProgress = Math.floor(((uploadedChunks + finish) / totalChunks) * 100);
+        setUploadProgress(currentProgress);
+
+        // 调用进度更新回调
+        if (onProgressUpdate) {
+          onProgressUpdate(uploadedChunks + finish);
+        }
       }, 0)
 
       return result;
@@ -151,7 +169,9 @@ export async function handleFileUpload(file: File, setUploadProgress: (progress:
 
     // 检查是否已取消
     if (signal?.aborted) {
-      throw new Error('Upload aborted');
+      const abortError = new Error('Upload aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
     }
 
     // 4. 通知服务器合并文件

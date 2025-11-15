@@ -28,6 +28,8 @@ model File {
   uploaded      Boolean    @default(false) // 是否已完成上传和合并
   path          String?    // 合并后文件存储路径
   uploadId      String?    // 分片上传任务ID
+  uploadChunks  Int        @default(0) //已上传分片数量
+  totalChunks   Int        @default(0) //总分片数量
 }
 
 // 文件分片模型

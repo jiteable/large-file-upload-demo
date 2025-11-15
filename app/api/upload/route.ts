@@ -1,24 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server';
-import { writeFile, mkdir, readFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import path, { join } from 'path';
 import { db } from '@/db/db';
 import { multipartUpload, initMultipartUpload } from '../utils';
 
 export const api = {
   bodyParser: { sizeLimit: '10mb' }
 };
-
-const UPLOAD_DIR = join(process.cwd(), 'server', 'uploads');
-
-// 确保临时目录存在
-async function ensureTempDir(fileNameHash: string) {
-  const fileDir = join(UPLOAD_DIR, fileNameHash);
-  if (!existsSync(fileDir)) {
-    await mkdir(fileDir, { recursive: true });
-  }
-  return fileDir;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +18,7 @@ export async function POST(request: NextRequest) {
     const chunkHash = formData.get('chunkHash') as string | null;
     const fileSize = formData.get('fileSize') as string | null;
     const lastModified = formData.get('lastModified') as string | null;
+    const totalChunks = formData.get('totalChunks') as number | null;
 
     // 验证必要参数
     if (!chunk || !chunkIndex || !fileName || !fileSize || !lastModified) {
@@ -75,7 +63,8 @@ export async function POST(request: NextRequest) {
               hash: fileNameHash,
               size: parseInt(fileSize),
               lastModified: BigInt(parseInt(lastModified)),
-              uploadId: uploadId
+              uploadId: uploadId,
+              totalChunks: totalChunks ? parseInt(totalChunks.toString()) : undefined,
             }
           });
         } catch (createError) {
@@ -118,13 +107,45 @@ export async function POST(request: NextRequest) {
     // 构造分片在OSS中的路径（最终合并后的文件路径），使用fileNameHash确保唯一性
     const mergedFileKey = `files/uploaded/merge/${fileNameHash}/${fileName}`;
 
-    // 上传分片到OSS
-    const uploadResult = await multipartUpload(
-      mergedFileKey,
-      uploadId,
-      parseInt(chunkIndex) + 1, // partNumber从1开始
-      chunk
-    );
+    // 上传分片到OSS，如果uploadId失效则重新初始化
+    let uploadResult;
+    try {
+      uploadResult = await multipartUpload(
+        mergedFileKey,
+        uploadId,
+        parseInt(chunkIndex) + 1, // partNumber从1开始
+        chunk
+      );
+    } catch (uploadError: any) {
+      // 检查是否是上传ID失效错误
+      if (uploadError.message.includes('NoSuchUpload') || uploadError.message.includes('上传错误')) {
+        console.log('上传ID失效，重新初始化上传任务');
+
+        // 重新初始化分片上传任务
+        const multipartUploadResult = await initMultipartUpload(mergedFileKey);
+        const newUploadId = multipartUploadResult.uploadId;
+
+        // 更新数据库中的uploadId
+        await db.file.update({
+          where: { hash: fileNameHash },
+          data: { uploadId: newUploadId }
+        });
+
+        // 使用新的uploadId重新上传分片
+        uploadResult = await multipartUpload(
+          mergedFileKey,
+          newUploadId,
+          parseInt(chunkIndex) + 1, // partNumber从1开始
+          chunk
+        );
+
+        // 更新uploadId变量以便后续使用
+        uploadId = newUploadId;
+      } else {
+        // 如果不是上传ID失效错误，则重新抛出
+        throw uploadError;
+      }
+    }
 
     // 将分片信息保存到数据库
     try {
@@ -167,7 +188,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
 // 禁用默认的GET方法
 export async function GET() {
   return new Response('Method not allowed', { status: 405 });
