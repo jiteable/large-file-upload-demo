@@ -4,7 +4,9 @@
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { handleFileUpload, calculateFileNameHash, resumeFileUpload } from '@/utils/uploadFile';
 import { Progress } from '@/components/ui/progress';
-
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface FileUploadProps {
   initialFile?: File | null;
@@ -238,6 +240,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
       console.error('等待文件选择时出错:', error);
     }
   };
+
   const resumeUploadWithFile = async (dbFile: DatabaseFile, selectedFile: File) => {
     // 创建一个新的上传任务
     const resumeTask: UploadTask = {
@@ -392,151 +395,264 @@ const FileUpload: React.FC<FileUploadProps> = ({ initialFile = null }) => {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">文件上传</h2>
-        <div className="flex items-center space-x-2">
-          <input
-            id="file-upload-input"
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <label
-            htmlFor="file-upload-input"
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md font-medium text-gray-700 cursor-pointer"
-          >
-            选择文件
-          </label>
-          <button
-            onClick={handleUpload}
-            disabled={!file}
-            className={`px-4 py-2 rounded-md font-medium ${!file
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg transition-shadow duration-300'
-              }`}
-          >
-            上传
-          </button>
-        </div>
-      </div>
-
-      {file && (
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
-          <h3 className="font-medium text-gray-700 mb-2 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            待上传文件:
-          </h3>
-          <div className="space-y-1 text-sm text-gray-600">
-            <p className="flex items-center">
-              <span className="font-medium w-16">名称:</span>
-              <span className="truncate ml-2" title={file.name}>{file.name}</span>
-            </p>
-            <p><span className="font-medium w-16 inline-block">大小:</span> {Math.round(file.size / 1024)} KB</p>
-            <p><span className="font-medium w-16 inline-block">类型:</span> {file.type || 'N/A'}</p>
+    <div className="w-full max-w-3xl mx-auto p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">文件上传</h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">选择并上传您的文件</p>
+            </div>
+            <Button
+              onClick={removeCompletedTasks}
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+            >
+              清除已完成
+            </Button>
           </div>
-        </div>
-      )}
 
-      <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-medium text-gray-700">上传任务</h3>
-          <button
-            onClick={removeCompletedTasks}
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            清除已完成
-          </button>
-        </div>
-
-        {uploadTasks.length === 0 && incompleteUploads.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">暂无上传任务</p>
-        ) : (
-          <div className="space-y-4">
-            {/* 显示未完成的上传任务 */}
-            {incompleteUploads.map((dbFile) => (
-              <div key={`incomplete-${dbFile.id}`} className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-medium text-gray-700 truncate max-w-xs" title={dbFile.filename}>
-                    {dbFile.filename}
-                  </h4>
-                  <button
-                    onClick={() => handleResumeIncomplete(dbFile)}
-                    className="text-xs px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded"
-                  >
-                    恢复上传
-                  </button>
+          <div className="grid gap-6">
+            {/* 文件选择区域 */}
+            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center transition-colors hover:border-gray-400 dark:hover:border-gray-500">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <svg
+                  className="w-10 h-10 text-gray-400 dark:text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  ></path>
+                </svg>
+                <div className="space-y-1">
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {file ? file.name : '拖拽文件到此处或点击选择'}
+                  </p>
+                  {!file && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      支持所有文件类型
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">未完成</span>
-                    <span className="text-gray-600">
-                      ({dbFile.totalChunks ? Math.round((dbFile.uploadChunks / dbFile.totalChunks) * 100) : 0}%)
-                    </span>
-                  </div>
-                  <Progress
-                    value={dbFile.totalChunks ? (dbFile.uploadChunks / dbFile.totalChunks) * 100 : 0}
-                    className="w-full h-2"
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  <Input
+                    id="file-upload-input"
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
                   />
+                  <Label
+                    htmlFor="file-upload-input"
+                    className="cursor-pointer"
+                  >
+                    <Button variant="outline" className="w-full">
+                      选择文件
+                    </Button>
+                  </Label>
+                  <Button
+                    onClick={handleUpload}
+                    disabled={!file}
+                    className="w-full"
+                  >
+                    开始上传
+                  </Button>
                 </div>
               </div>
-            ))}
+            </div>
 
-            {/* 显示当前上传任务 */}
-            {uploadTasks.map((task) => (
-              <div key={task.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-medium text-gray-700 truncate max-w-xs" title={task.file.name}>
-                    {task.file.name}
-                  </h4>
-                  <div className="flex space-x-1">
-                    {task.status === 'uploading' && (
-                      <button
-                        onClick={() => handlePause(task.id)}
-                        className="text-xs px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded"
-                      >
-                        暂停
-                      </button>
-                    )}
-                    {task.status === 'paused' && (
-                      <button
-                        onClick={() => handleResume(task.id)}
-                        className="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded"
-                      >
-                        继续
-                      </button>
-                    )}
-                    {(task.status === 'paused' || task.status === 'pending') && (
-                      <button
-                        onClick={() => handleCancel(task.id)}
-                        className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded"
-                      >
-                        取消
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      {task.status === 'completed' && '上传成功'}
-                      {task.status === 'failed' && '上传失败'}
-                      {task.status === 'paused' && '已暂停'}
-                      {task.status === 'uploading' && '上传中...'}
-                      {task.status === 'pending' && '等待中...'}
+            {/* 文件信息卡片 */}
+            {file && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <svg
+                    className="w-5 h-5 text-blue-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    ></path>
+                  </svg>
+                  待上传文件
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400">文件名</span>
+                    <span className="font-medium text-gray-900 dark:text-white truncate" title={file.name}>
+                      {file.name}
                     </span>
-                    <span className="text-gray-600">{Math.round(task.progress)}%</span>
                   </div>
-                  <Progress value={task.progress} className="w-full h-2" />
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400">文件大小</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {Math.round(file.size / 1024)} KB
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400">文件类型</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {file.type || 'N/A'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* 上传任务列表 */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">上传任务</h3>
+
+              {uploadTasks.length === 0 && incompleteUploads.length === 0 ? (
+                <div className="text-center py-8">
+                  <svg
+                    className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    ></path>
+                  </svg>
+                  <h3 className="mt-4 font-medium text-gray-900 dark:text-white">暂无上传任务</h3>
+                  <p className="mt-1 text-gray-500 dark:text-gray-400">
+                    选择文件开始上传
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* 显示未完成的上传任务 */}
+                  {incompleteUploads.map((dbFile) => (
+                    <div
+                      key={`incomplete-${dbFile.id}`}
+                      className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4"
+                    >
+                      <div className="flex flex-col sm:flex-row justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h4
+                            className="font-medium text-gray-900 dark:text-yellow-100 truncate"
+                            title={dbFile.filename}
+                          >
+                            {dbFile.filename}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-800/50 text-yellow-800 dark:text-yellow-200 rounded-full">
+                              未完成
+                            </span>
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {dbFile.totalChunks ? Math.round((dbFile.uploadChunks / dbFile.totalChunks) * 100) : 0}% 完成
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleResumeIncomplete(dbFile)}
+                            size="sm"
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                          >
+                            恢复上传
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <Progress
+                          value={dbFile.totalChunks ? (dbFile.uploadChunks / dbFile.totalChunks) * 100 : 0}
+                          className="w-full h-2"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* 显示当前上传任务 */}
+                  {uploadTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-4"
+                    >
+                      <div className="flex flex-col sm:flex-row justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h4
+                            className="font-medium text-gray-900 dark:text-white truncate"
+                            title={task.file.name}
+                          >
+                            {task.file.name}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-xs px-2 py-1 rounded-full ${task.status === 'completed'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                                : task.status === 'failed'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                                  : task.status === 'paused'
+                                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
+                                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                              }`}>
+                              {task.status === 'completed' && '上传成功'}
+                              {task.status === 'failed' && '上传失败'}
+                              {task.status === 'paused' && '已暂停'}
+                              {task.status === 'uploading' && '上传中...'}
+                              {task.status === 'pending' && '等待中...'}
+                            </span>
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {Math.round(task.progress)}% 完成
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {task.status === 'uploading' && (
+                            <Button
+                              onClick={() => handlePause(task.id)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              暂停
+                            </Button>
+                          )}
+                          {task.status === 'paused' && (
+                            <Button
+                              onClick={() => handleResume(task.id)}
+                              size="sm"
+                            >
+                              继续
+                            </Button>
+                          )}
+                          {(task.status === 'paused' || task.status === 'pending') && (
+                            <Button
+                              onClick={() => handleCancel(task.id)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              取消
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <Progress value={task.progress} className="w-full h-2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
