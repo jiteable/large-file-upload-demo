@@ -50,23 +50,13 @@ export default function UploadedFilesPage() {
 
   const handleDownload = async (fileId: string, filename: string) => {
     try {
-      const response = await fetch(`/api/download?id=${fileId}`);
-
-      if (!response.ok) {
-        throw new Error(`下载失败: ${response.status}`);
-      }
-
-      // 获取响应体
-      const blob = await response.blob();
-      // 创建下载链接
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // 对于大文件，直接使用window.location.href或者创建一个临时链接
+      const link = document.createElement('a');
+      link.href = `/api/download?id=${fileId}`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
       console.error('下载失败:', error);
       alert('文件下载失败，请稍后重试');
@@ -137,8 +127,8 @@ export default function UploadedFilesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${file.uploaded
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-yellow-100 text-yellow-800'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
                               }`}>
                               {file.uploaded ? '已完成' : '上传中'}
                             </span>

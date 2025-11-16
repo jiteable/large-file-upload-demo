@@ -21,7 +21,7 @@ model File {
   filename          String     // 原始文件名
   hash          String     @unique // 文件名哈希，用于唯一标识文件
   size          Int        // 文件大小（字节）
-  lastModified  BigInt     // 文件最后修改时间戳
+  lastModified  Int     // 文件最后修改时间戳
   createdAt     DateTime   @default(now())
   mergedAt      DateTime?  // 文件合并完成时间
   chunks        Chunk[]    // 关联的文件分片

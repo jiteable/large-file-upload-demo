@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
               filename: fileName,
               hash: fileNameHash,
               size: parseInt(fileSize),
-              lastModified: BigInt(parseInt(lastModified)),
+              lastModified: Math.floor(parseInt(lastModified) / 1000), // 转换为秒
               uploadId: uploadId,
               totalChunks: totalChunks ? parseInt(totalChunks.toString()) : undefined,
             }

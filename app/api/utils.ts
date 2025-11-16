@@ -60,6 +60,24 @@ export async function multipartUpload(objectName: string, uploadId: string, part
   }
 }
 
+/**
+ * 流式下载文件
+ * @param objectName OSS中的对象名称（文件路径）
+ * @returns 包含文件流的结果对象
+ */
+export async function getStream(objectName: string) {
+  try {
+    // 填写Object完整路径。Object完整路径中不能包含Bucket名称。
+    const result = await client.getStream(objectName);
+    console.log(result);
+    return result;
+  } catch (e) {
+    console.log(e);
+    throw e;
+  }
+}
+
+
 
 //hashpath: 文件名hash
 //hash: 分片名hash

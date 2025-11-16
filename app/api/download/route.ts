@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server';
 import { db } from '@/db/db';
-import { ossClient } from '@/lib/oss';
+import { getStream } from '../utils';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,15 +28,40 @@ export async function GET(request: NextRequest) {
     }
 
     // 从OSS获取文件流
-    const result = await ossClient.get(file.path);
+    const result = await getStream(file.path);
 
     // 设置响应头
     const headers = new Headers();
     headers.append('Content-Disposition', `attachment; filename="${encodeURIComponent(file.filename)}"`);
-    headers.append('Content-Type', (result.res.headers as Record<string, string>)['content-type'] || 'application/octet-stream');
+    headers.append('Content-Type', 'application/octet-stream');
+    headers.append('Content-Length', (result.res.headers as Record<string, string>)['content-length'] || '0');
+
+    // 对于Node.js Readable流，我们需要将其转换为Web ReadableStream
+    const nodeStream = result.stream;
+
+    // 创建Web ReadableStream
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', (chunk: any) => {
+          controller.enqueue(new Uint8Array(chunk));
+        });
+
+        nodeStream.on('end', () => {
+          controller.close();
+        });
+
+        nodeStream.on('error', (err: any) => {
+          controller.error(err);
+        });
+      },
+
+      cancel() {
+        nodeStream.destroy();
+      }
+    });
 
     // 返回文件流
-    return new Response(result.content, {
+    return new Response(webStream, {
       status: 200,
       headers
     });
