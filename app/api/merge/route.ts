@@ -2,6 +2,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db/db';
 import { ossClient } from '@/lib/oss';
+import { genSuccessData, genErrorData } from '@/app/api/utils/gen-res-data';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     // 验证必要参数
     if (!fileName || !fileNameHash || totalChunks === undefined) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: fileName, fileNameHash, totalChunks' }),
+        JSON.stringify(genErrorData('Missing required fields: fileName, fileNameHash, totalChunks')),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     if (!fileRecord) {
       return new Response(
-        JSON.stringify({ error: 'File record not found' }),
+        JSON.stringify(genErrorData('File record not found')),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -41,14 +42,7 @@ export async function POST(request: NextRequest) {
     // 验证分片数量
     if (chunkRecords.length !== totalChunks) {
       return new Response(
-        JSON.stringify({
-          error: `Expected ${totalChunks} chunks, but found ${chunkRecords.length}`,
-          details: {
-            expectedChunks: totalChunks,
-            actualChunks: chunkRecords.length,
-            uploadedChunks: chunkRecords.map(c => c.index)
-          }
-        }),
+        JSON.stringify(genErrorData(`Expected ${totalChunks} chunks, but found ${chunkRecords.length}`)),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -82,11 +76,10 @@ export async function POST(request: NextRequest) {
     });
 
     return new Response(
-      JSON.stringify({
-        success: true,
+      JSON.stringify(genSuccessData({
         message: `File merged successfully: ${fileName}`,
         filePath: mergedFileKey
-      }),
+      })),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
@@ -95,19 +88,13 @@ export async function POST(request: NextRequest) {
     // 处理OSS特定错误
     if (error.code) {
       return new Response(
-        JSON.stringify({
-          error: 'Failed to merge file chunks',
-          details: `OSS Error ${error.code}: ${error.message}`
-        }),
+        JSON.stringify(genErrorData(`Failed to merge file chunks: OSS Error ${error.code}: ${error.message}`)),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({
-        error: 'Failed to merge file chunks',
-        details: error.message || 'Unknown error occurred during merge process'
-      }),
+      JSON.stringify(genErrorData(`Failed to merge file chunks: ${error.message || 'Unknown error occurred during merge process'}`)),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

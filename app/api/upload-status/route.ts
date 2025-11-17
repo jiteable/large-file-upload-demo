@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { db } from '../../../db/db';
+import { genSuccessData, genErrorData } from '@/app/api/utils/gen-res-data';
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     if (!fileNameHash) {
       return new Response(
-        JSON.stringify({ error: 'Missing fileNameHash' }),
+        JSON.stringify(genErrorData('Missing fileNameHash')),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -29,16 +30,16 @@ export async function POST(request: NextRequest) {
 
     // 返回分片数量和具体的分片索引数组
     return new Response(
-      JSON.stringify({
+      JSON.stringify(genSuccessData({
         uploadedChunks: chunkIndices.length,
         uploadedChunkIndices: chunkIndices
-      }),
+      })),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error getting uploaded chunks:', error);
     return new Response(
-      JSON.stringify({ uploadedChunks: 0, uploadedChunkIndices: [] }),
+      JSON.stringify(genSuccessData({ uploadedChunks: 0, uploadedChunkIndices: [] })),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   }

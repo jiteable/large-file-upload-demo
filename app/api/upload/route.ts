@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server';
 import { db } from '@/db/db';
-import { multipartUpload, initMultipartUpload } from '../utils';
+import { multipartUpload, initMultipartUpload } from '../utils/utils';
+import { genSuccessData, genErrorData } from '@/app/api/utils/gen-res-data';
 
 export const api = {
   bodyParser: { sizeLimit: '10mb' }
@@ -23,22 +24,14 @@ export async function POST(request: NextRequest) {
     // 验证必要参数
     if (!chunk || !chunkIndex || !fileName || !fileSize || !lastModified) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: chunk, chunkIndex, fileName, fileSize, lastModified' }),
+        JSON.stringify(genErrorData('Missing required fields: chunk, chunkIndex, fileName, fileSize, lastModified')),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('-----chunk: ', chunk)
-    console.log('------chunkIndex: ', chunkIndex)
-    console.log('-----fileName: ', fileName)
-    console.log('-----fileNameHash: ', fileNameHash)
-    console.log('-----chunkHash: ', chunkHash)
-    console.log('-----fileSize: ', fileSize)
-    console.log('-----lastModified: ', lastModified)
-
     if (!fileNameHash) {
       return new Response(
-        JSON.stringify({ error: 'Missing required field: fileNameHash' }),
+        JSON.stringify(genErrorData('Missing required field: fileNameHash')),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -99,7 +92,7 @@ export async function POST(request: NextRequest) {
     // 检查是否缺少uploadId（理论上不应该发生）
     if (!uploadId) {
       return new Response(
-        JSON.stringify({ error: 'Missing uploadId for multipart upload' }),
+        JSON.stringify(genErrorData('Missing uploadId for multipart upload')),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -165,11 +158,10 @@ export async function POST(request: NextRequest) {
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
+      JSON.stringify(genSuccessData({
         message: `Chunk ${chunkIndex} received successfully.`,
         uploadId: uploadId
-      }),
+      })),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
@@ -177,13 +169,13 @@ export async function POST(request: NextRequest) {
     // 如果是multipartUpload错误，则返回特定的错误信息
     if (error instanceof Error && error.message.includes('上传错误')) {
       return new Response(
-        JSON.stringify({ error: `Failed to upload chunk to OSS: ${error.message}` }),
+        JSON.stringify(genErrorData(`Failed to upload chunk to OSS: ${error.message}`)),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({ error: 'Failed to upload chunk' }),
+      JSON.stringify(genErrorData('Failed to upload chunk')),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

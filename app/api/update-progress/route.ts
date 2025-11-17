@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest } from 'next/server';
 import { db } from '@/db/db';
+import { genSuccessData, genErrorData } from '@/app/api/utils/gen-res-data';
 
 // 自定义 JSON 序列化函数来处理 BigInt
 function serialize(obj: any): string {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     if (!fileNameHash) {
       return new Response(
-        serialize({ error: 'Missing fileNameHash' }),
+        serialize(genErrorData('Missing fileNameHash')),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -40,11 +41,10 @@ export async function POST(request: NextRequest) {
     };
 
     return new Response(
-      serialize({
-        success: true,
+      serialize(genSuccessData({
         message: 'Upload progress updated successfully',
         file: serializedFile
-      }),
+      })),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
@@ -53,13 +53,13 @@ export async function POST(request: NextRequest) {
     // 如果是记录不存在的错误
     if (error instanceof Error && 'code' in error && error.code === 'P2025') {
       return new Response(
-        serialize({ error: 'File record not found' }),
+        serialize(genErrorData('File record not found')),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      serialize({ error: 'Failed to update upload progress' }),
+      serialize(genErrorData('Failed to update upload progress')),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
