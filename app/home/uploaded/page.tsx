@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface UploadedFile {
@@ -64,16 +63,12 @@ export default function UploadedFilesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6">
+    <div className="py-12 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8">
-          <Link href="/" className="inline-block text-blue-600 hover:text-blue-800 mb-4">&larr; 返回首页</Link>
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-3">
             已上传文件
           </h1>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            查看和管理已上传的文件
-          </p>
         </header>
 
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
